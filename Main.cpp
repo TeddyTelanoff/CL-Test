@@ -5,7 +5,7 @@
 #define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 
-static const char *clGetErrorString(cl_int error)
+inline const char *clGetErrorString(cl_int error)
 {
 	switch (error)
 	{
@@ -84,6 +84,7 @@ static const char *clGetErrorString(cl_int error)
 }
 
 #define CHECK_EC if (ec != CL_SUCCESS) printf("Line %i: %s\n", __LINE__, clGetErrorString(ec))
+#define Exit { (void)getchar(); exit(0); }
 
 int main(void)
 {
@@ -115,8 +116,14 @@ __kernel void hello(__global char* string)
 	cl_uint nDevices;
 	cl_int ec;
 
-	clGetPlatformIDs(1, &platform, &nPlatforms);
-	clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, &nDevices);
+	ec = clGetPlatformIDs(1, &platform, &nPlatforms); CHECK_EC;
+	ec = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, &nDevices); CHECK_EC;
+	if (ec == CL_DEVICE_NOT_FOUND || ec == CL_DEVICE_NOT_AVAILABLE)
+		Exit;
+
+	char deviceName[128] = {};
+	ec = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(deviceName), &deviceName, NULL); CHECK_EC;
+	printf("Device Name: '%s'\n", deviceName);
 
 	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
 	cl_command_queue q = clCreateCommandQueue(context, device, 0, &ec); CHECK_EC;
@@ -151,5 +158,5 @@ __kernel void hello(__global char* string)
 	ec = clReleaseCommandQueue(q); CHECK_EC;
 	ec = clReleaseContext(context); CHECK_EC;
 
-	(void)getchar();
+	Exit;
 }
