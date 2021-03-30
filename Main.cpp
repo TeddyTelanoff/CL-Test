@@ -128,7 +128,8 @@ __kernel void hello(__global char* string)
 	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
 	cl_command_queue q = clCreateCommandQueue(context, device, 0, &ec); CHECK_EC;
 
-	cl_mem buff = clCreateBuffer(context, CL_MEM_READ_WRITE, 16, NULL, &ec); CHECK_EC;
+	char str[16] = "Not Hello";
+	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(str), &str, &ec); CHECK_EC;
 
 	cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
 	ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
@@ -146,8 +147,7 @@ __kernel void hello(__global char* string)
 	ec = clSetKernelArg(kernel, 0, sizeof(buff), &buff); CHECK_EC;
 	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
 	
-	char str[16] = {};
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, 16, str, 0, NULL, NULL); CHECK_EC;
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
 	puts(str);
 
 	ec = clFlush(q); CHECK_EC;
