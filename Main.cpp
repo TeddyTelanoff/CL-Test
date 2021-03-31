@@ -89,7 +89,7 @@ int main(void)
 {
 	const char *src =
 		R"(
-__kernel void CalcSqrt(__global float *data)
+kernel void CalcSqrt(global float *data)
 {
 	int id = get_global_id(0);
 	data[id] = sqrt(data[id]);
