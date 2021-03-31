@@ -205,6 +205,7 @@ int main(void)
 			char *log = malloc(sz);
 			clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sz, log, NULL);
 			puts(log);
+			Exit;
 		}
 
 		kernel = clCreateKernel(prog, "Draw", &ec); CHECK_EC;
