@@ -120,7 +120,7 @@ inline LRESULT CALLBACK MyWinProc(_In_ HWND wnd, _In_ UINT msg, _In_ WPARAM wPar
 	{
 		SIZE_T nThrds = (SIZE_T)szPtr[0] * (SIZE_T)szPtr[1];
 		ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &nThrds, NULL, 0, NULL, NULL); CHECK_EC;
-		ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(UINT) * szPtr[2], pixels, 0, NULL, NULL); CHECK_EC;
+		//ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(UINT) * szPtr[2], pixels, 0, NULL, NULL); CHECK_EC;
 
 		ec = clFlush(q); CHECK_EC;
 		//ec = clFinish(q); CHECK_EC;
