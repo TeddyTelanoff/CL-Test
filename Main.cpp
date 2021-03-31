@@ -90,16 +90,15 @@ int main(void)
 {
 	const char *src =
 		R"(
-__kernel void HelloWorld(__global char *string, __global int *x)
+__kernel void HelloWorld(__global char **string, __global int *x)
 {
-	const char *const strs[16] =
+	switch (x)
 	{
-		"Hello, world!",
-		"Lol Gamer mode :) ",
-	};
-
-	for (int i = 0; i < 16; i++)
-		string[i] = strs[*x][i];
+	case 0:
+		*string = "Hello, world!";
+	case 1:
+		*string = "Lol Gamer mode :).";
+	}
 }
 )";
 	size_t srcSz = strlen(src);
@@ -121,9 +120,10 @@ __kernel void HelloWorld(__global char *string, __global int *x)
 
 	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
 	cl_command_queue q = clCreateCommandQueue(context, device, 0, &ec); CHECK_EC;
-
+	
 	char str[16] = "Not Hello";
-	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(str), &str, &ec); CHECK_EC;
+	char **strPtr = (char **)&str;
+	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(strPtr), &strPtr, &ec); CHECK_EC;
 	int i = 0;
 	cl_mem buff1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(i), &i, &ec); CHECK_EC;
 
@@ -144,16 +144,16 @@ __kernel void HelloWorld(__global char *string, __global int *x)
 	ec = clSetKernelArg(kernel, 1, sizeof(buff1), &buff1); CHECK_EC;
 	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
 
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
-	puts(str);
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
+	puts(*strPtr);
 	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
 
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
-	puts(str);
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
+	puts(*strPtr);
 	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
 	
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
-	puts(str);
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
+	puts(*strPtr);
 
 	ec = clFlush(q); CHECK_EC;
 	ec = clFinish(q); CHECK_EC;
