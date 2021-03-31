@@ -1,15 +1,22 @@
-uchar Rand(ulong seed)
+uint Hash(uint n)
 {
-	return seed >> 13213721 ^ seed << 9128321;
+	n ^= 2747636419;
+	n *= 2654435769;
+
+	n ^= n >> 16;
+	n *= 2654435769;
+
+	n ^= n >> 16;
+	n *= 2654435769;
+	return n;
 }
 
 kernel void Draw(global int *pixels)
 {
 	size_t id = get_global_id(0);
+	uint x = id % 512, y = id / 512;
 	uchar r, g, b;
-	r = Rand(id);
-	g = Rand(id);
-	b = Rand(id);
+	r = g = b = Hash(x) ^ Hash(y);
 	
 	pixels[id] = (r << 16) | (g << 8) | (b << 0);
 }
