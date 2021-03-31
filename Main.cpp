@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
 #include <CL/cl.h>
 
 inline const char *clGetErrorString(cl_int error)
@@ -90,15 +89,10 @@ int main(void)
 {
 	const char *src =
 		R"(
-__kernel void HelloWorld(__global char **string, __global int *x)
+__kernel void CalcSqrt(__global float *data)
 {
-	switch (x)
-	{
-	case 0:
-		*string = "Hello, world!";
-	case 1:
-		*string = "Lol Gamer mode :).";
-	}
+	int id = get_global_id(0);
+	data[id] = sqrt(data[id]);
 }
 )";
 	size_t srcSz = strlen(src);
@@ -119,13 +113,10 @@ __kernel void HelloWorld(__global char **string, __global int *x)
 	printf("Device Name: '%s'\n", deviceName);
 
 	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
-	cl_command_queue q = clCreateCommandQueue(context, device, 0, &ec); CHECK_EC;
+	cl_command_queue q = clCreateCommandQueueWithProperties(context, device, NULL, &ec); CHECK_EC;
 	
-	char str[16] = "Not Hello";
-	char **strPtr = (char **)&str;
-	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(strPtr), &strPtr, &ec); CHECK_EC;
-	int i = 0;
-	cl_mem buff1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(i), &i, &ec); CHECK_EC;
+	float data[] = { 81, 69, 64 };
+	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(data), &data, &ec); CHECK_EC;
 
 	cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
 	ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
@@ -139,21 +130,14 @@ __kernel void HelloWorld(__global char **string, __global int *x)
 		puts(log);
 	}
 
-	cl_kernel kernel = clCreateKernel(prog, "HelloWorld", &ec); CHECK_EC;
+	cl_kernel kernel = clCreateKernel(prog, "CalcSqrt", &ec); CHECK_EC;
 	ec = clSetKernelArg(kernel, 0, sizeof(buff), &buff); CHECK_EC;
-	ec = clSetKernelArg(kernel, 1, sizeof(buff1), &buff1); CHECK_EC;
-	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
-
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
-	puts(*strPtr);
-	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
-
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
-	puts(*strPtr);
-	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
-	
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(strPtr), strPtr, 0, NULL, NULL); CHECK_EC;
-	puts(*strPtr);
+	size_t globalWork = 3;
+	ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &globalWork, NULL, 0, NULL, NULL); CHECK_EC;
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(data), data, 0, NULL, NULL); CHECK_EC;
+	for (int i = 0; i < sizeof(data) / sizeof(*data); i++)
+		printf("%f ", data[i]);
+	putchar('\n');
 
 	ec = clFlush(q); CHECK_EC;
 	ec = clFinish(q); CHECK_EC;
