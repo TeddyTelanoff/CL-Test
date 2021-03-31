@@ -11,12 +11,13 @@ uint Hash(uint n)
 	return n;
 }
 
-kernel void Draw(global int *pixels)
+kernel void Draw(global uint *pixels, global uint *size)
 {
 	size_t id = get_global_id(0);
 	uint x = id % 512, y = id / 512;
+	uint width = size[0], height = size[1];
 	uchar r, g, b;
 	r = g = b = Hash(x) ^ Hash(y);
 	
-	pixels[id] = (r << 16) | (g << 8) | (b << 0);
+	pixels[id] *= (r << 16) | (g << 8) | (b << 0);
 }
