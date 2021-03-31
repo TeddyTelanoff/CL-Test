@@ -84,28 +84,22 @@ inline const char *clGetErrorString(cl_int error)
 }
 
 #define CHECK_EC if (ec != CL_SUCCESS) printf("Line %i: %s\n", __LINE__, clGetErrorString(ec))
-#define Exit { (void)getchar(); exit(0); }
+#define Exit { (void)system("pause"); exit(0); }
 
 int main(void)
 {
 	const char *src =
 		R"(
-__kernel void hello(__global char* string)
+__kernel void HelloWorld(__global char *string, __global int *x)
 {
-	string[0]  = 'H';
-	string[1]  = 'e';
-	string[2]  = 'l';
-	string[3]  = 'l';
-	string[4]  = 'o';
-	string[5]  = ',';
-	string[6]  = ' ';
-	string[7]  = 'W';
-	string[8]  = 'o';
-	string[9]  = 'r';
-	string[10] = 'l';
-	string[11] = 'd';
-	string[12] = '!';
-	string[13] = '\0';
+	const char *const strs[16] =
+	{
+		"Hello, world!",
+		"Lol Gamer mode :) ",
+	};
+
+	for (int i = 0; i < 16; i++)
+		string[i] = strs[*x][i];
 }
 )";
 	size_t srcSz = strlen(src);
@@ -130,6 +124,8 @@ __kernel void hello(__global char* string)
 
 	char str[16] = "Not Hello";
 	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(str), &str, &ec); CHECK_EC;
+	int i = 0;
+	cl_mem buff1 = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(i), &i, &ec); CHECK_EC;
 
 	cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
 	ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
@@ -143,8 +139,17 @@ __kernel void hello(__global char* string)
 		puts(log);
 	}
 
-	cl_kernel kernel = clCreateKernel(prog, "hello", &ec); CHECK_EC;
+	cl_kernel kernel = clCreateKernel(prog, "HelloWorld", &ec); CHECK_EC;
 	ec = clSetKernelArg(kernel, 0, sizeof(buff), &buff); CHECK_EC;
+	ec = clSetKernelArg(kernel, 1, sizeof(buff1), &buff1); CHECK_EC;
+	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
+
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
+	puts(str);
+	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
+
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
+	puts(str);
 	ec = clEnqueueTask(q, kernel, 0, NULL, NULL); CHECK_EC;
 	
 	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(str), str, 0, NULL, NULL); CHECK_EC;
