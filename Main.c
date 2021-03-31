@@ -136,7 +136,7 @@ int main(void)
 		puts(log);
 	}
 
-	cl_kernel kernel = clCreateKernel(prog, "Square", &ec); CHECK_EC;
+	cl_kernel kernel = clCreateKernel(prog, "FastISqrt", &ec); CHECK_EC;
 	ec = clSetKernelArg(kernel, 0, sizeof buff, &buff); CHECK_EC;
 	size_t nThrds = nObjs;
 	ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &nThrds, NULL, 0, NULL, NULL); CHECK_EC;
