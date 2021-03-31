@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include <CL/cl.h>
+#include <Windows.h>
 
 inline const char *clGetErrorString(cl_int error)
 {
@@ -83,74 +85,145 @@ inline const char *clGetErrorString(cl_int error)
 	}
 }
 
+HDC bmDc;
+HBITMAP bm;
+int *pixels;
+BITMAPINFO bmi;
+enum { nPixels = 512 * 512 };
+inline LRESULT CALLBACK MyWinProc(_In_ HWND wnd, _In_ UINT msg, _In_ WPARAM wParam, _In_ LPARAM lParam)
+{
+	switch (msg)
+	{
+	case WM_DESTROY:
+		PostQuitMessage(0);
+		return 0;
+	case WM_PAINT:
+	{
+		if (pixels != NULL)
+		{
+			PAINTSTRUCT paint;
+			HDC dc = BeginPaint(wnd, &paint);
+			//for (int y = 0; y < 512; y++)
+			//	for (int x = 0; x < 512; x++)
+			//		SetPixelV(dc, x, y, pixels[x + y * 512]);
+			//SetDIBits(dc, bm, 0, 512, pixels, &bmi, DIB_RGB_COLORS);
+			BitBlt(dc, 0, 0, 512, 512, bmDc, 0, 0, SRCCOPY);
+			EndPaint(wnd, &paint);
+		}
+		return 0;
+	}
+
+	default:
+		return DefWindowProcA(wnd, msg, wParam, lParam);
+	}
+}
+
 #define CHECK_EC if (ec != CL_SUCCESS) printf("Line %i: %s\n", __LINE__, clGetErrorString(ec))
 #define Exit { (void)system("pause"); exit(0); }
 
 int main(void)
 {
-	char *src;
-	size_t srcSz;
 	{
-		FILE *fs = fopen("Main.cl", "rb");
-		fseek(fs, 0, SEEK_END);
-		srcSz = ftell(fs);
-		src = malloc(srcSz + 1);
-		rewind(fs);
-		fread(src, 1, srcSz, fs);
-		fclose(fs);
-		src[srcSz] = 0;
+		char *src;
+		size_t srcSz;
+		{
+			FILE *fs = fopen("Main.cl", "rb");
+			fseek(fs, 0, SEEK_END);
+			srcSz = ftell(fs);
+			src = malloc(srcSz + 1);
+			rewind(fs);
+			fread(src, 1, srcSz, fs);
+			fclose(fs);
+			src[srcSz] = 0;
+		}
+
+		cl_uint nPlatforms;
+		cl_platform_id platform;
+		cl_device_id device;
+		cl_uint nDevices;
+		cl_int ec;
+
+		ec = clGetPlatformIDs(1, &platform, &nPlatforms); CHECK_EC;
+		ec = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, &nDevices); CHECK_EC;
+		if (ec == CL_DEVICE_NOT_FOUND || ec == CL_DEVICE_NOT_AVAILABLE)
+			Exit;
+
+		char deviceName[128];
+		ec = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(deviceName), &deviceName, NULL); CHECK_EC;
+		printf("Device Name: '%s'\n", deviceName);
+
+		cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
+		cl_command_queue q = clCreateCommandQueueWithProperties(context, device, NULL, &ec); CHECK_EC;
+
+		pixels = malloc(sizeof(int) * nPixels);
+		cl_mem buff = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR, sizeof(int) * nPixels, pixels, &ec); CHECK_EC;
+
+		cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
+		ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
+		if (ec == CL_BUILD_PROGRAM_FAILURE)
+		{
+			size_t sz;
+			clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &sz);
+
+			char *log = malloc(sz);
+			clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sz, log, NULL);
+			puts(log);
+		}
+
+		cl_kernel kernel = clCreateKernel(prog, "Draw", &ec); CHECK_EC;
+		ec = clSetKernelArg(kernel, 0, sizeof buff, &buff); CHECK_EC;
+		size_t nThrds = nPixels;
+		ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &nThrds, NULL, 0, NULL, NULL); CHECK_EC;
+		ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(int) * nPixels, pixels, 0, NULL, NULL); CHECK_EC;
+
+		ec = clFlush(q); CHECK_EC;
+		ec = clFinish(q); CHECK_EC;
+		ec = clReleaseKernel(kernel); CHECK_EC;
+		ec = clReleaseProgram(prog); CHECK_EC;
+		ec = clReleaseMemObject(buff); CHECK_EC;
+		ec = clReleaseCommandQueue(q); CHECK_EC;
+		ec = clReleaseContext(context); CHECK_EC;
 	}
 
-	cl_uint nPlatforms;
-	cl_platform_id platform;
-	cl_device_id device;
-	cl_uint nDevices;
-	cl_int ec;
-
-	ec = clGetPlatformIDs(1, &platform, &nPlatforms); CHECK_EC;
-	ec = clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, &nDevices); CHECK_EC;
-	if (ec == CL_DEVICE_NOT_FOUND || ec == CL_DEVICE_NOT_AVAILABLE)
-		Exit;
-
-	char deviceName[128];
-	ec = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(deviceName), &deviceName, NULL); CHECK_EC;
-	printf("Device Name: '%s'\n", deviceName);
-
-	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
-	cl_command_queue q = clCreateCommandQueueWithProperties(context, device, NULL, &ec); CHECK_EC;
-
-	enum { nObjs = 7};
-	float in[nObjs] = { 6, 9, 4, 20, 123, 9090909, 120312.321f };
-	float out[nObjs];
-	cl_mem buff = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof in, &in, &ec); CHECK_EC;
-
-	cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
-	ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
-	if (ec == CL_BUILD_PROGRAM_FAILURE)
 	{
-		size_t sz;
-		clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &sz);
+		HMODULE module = GetModuleHandleA(NULL);
+		const char className[] = ":)";
+		WNDCLASSA cls = { .lpfnWndProc = MyWinProc, .lpszClassName = className, .hInstance = module };
+		RegisterClassA(&cls);
+		HWND wnd = CreateWindowExA(0, className, "Title", WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 512, 512, NULL, NULL, module, NULL);
 
-		char *log = malloc(sz);
-		clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sz, log, NULL);
-		puts(log);
+		bmi = (BITMAPINFO)
+		{
+			{
+				sizeof(BITMAPINFOHEADER),
+				.biWidth = 512, .biHeight = -512,
+				.biPlanes = 1,
+				.biBitCount = 32,
+				.biCompression = BI_RGB,
+			}
+		};
+
+		int *buff = malloc(sizeof (int) * nPixels);
+
+		HDC dc = GetDC(wnd);
+		bm = CreateDIBSection(dc, &bmi, DIB_RGB_COLORS, &buff, NULL, 0);
+		assert(bm != NULL);
+		bmDc = CreateCompatibleDC(dc);
+		HGDIOBJ oldObj = SelectObject(bmDc, bm);
+
+		memcpy(buff, pixels, sizeof (int) * nPixels);
+
+		MSG msg;
+		while (GetMessageA(&msg, wnd, 0, 0))
+		{
+			TranslateMessage(&msg);
+			DispatchMessageA(&msg);
+		}
+
+		DestroyWindow(wnd);
+		UnregisterClassA(className, NULL);
 	}
 
-	cl_kernel kernel = clCreateKernel(prog, "FastISqrt", &ec); CHECK_EC;
-	ec = clSetKernelArg(kernel, 0, sizeof buff, &buff); CHECK_EC;
-	size_t nThrds = nObjs;
-	ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &nThrds, NULL, 0, NULL, NULL); CHECK_EC;
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof out, out, 0, NULL, NULL); CHECK_EC;
-	for (int i = 0; i < nObjs; i++)
-		printf("In: %f, Out: %f\n", in[i], out[i]);
-
-	ec = clFlush(q); CHECK_EC;
-	ec = clFinish(q); CHECK_EC;
-	ec = clReleaseKernel(kernel); CHECK_EC;
-	ec = clReleaseProgram(prog); CHECK_EC;
-	ec = clReleaseMemObject(buff); CHECK_EC;
-	ec = clReleaseCommandQueue(q); CHECK_EC;
-	ec = clReleaseContext(context); CHECK_EC;
-
+	free(pixels);
 	Exit;
 }

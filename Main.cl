@@ -1,22 +1,15 @@
-kernel void Sqrt(global float *values, size_t id)
+uchar Rand(ulong seed)
 {
-	values[id] = sqrt(values[id]);
+	return seed >> 13213721 ^ seed << 9128321;
 }
 
-kernel void ISqrt(global float *values)
-{
-	// size_t id = get_global_id(get_work_dim() - 1);
-	size_t id = get_global_id(0);
-	values[id] = 1 / sqrt(values[id]);
-}
-
-kernel void FastISqrt(global float *values)
+kernel void Draw(global int *pixels)
 {
 	size_t id = get_global_id(0);
-	float f = values[id];
-	int i = *(int *)&f;
-	i = 0x5f3759df - (i >> 1);
-	f = *(float *)&i;
-	// f = f * (1.5f - f * f * f * 0.5f);
-	values[id] = f;
+	uchar r, g, b;
+	r = Rand(id);
+	g = Rand(id);
+	b = Rand(id);
+	
+	pixels[id] = (r << 16) | (g << 8) | (b << 0);
 }
