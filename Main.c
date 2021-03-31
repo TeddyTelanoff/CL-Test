@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,15 +88,18 @@ inline const char *clGetErrorString(cl_int error)
 
 int main(void)
 {
-	const char *src =
-		R"(
-kernel void CalcSqrt(global float *data)
-{
-	int id = get_global_id(0);
-	data[id] = sqrt(data[id]);
-}
-)";
-	size_t srcSz = strlen(src);
+	char *src;
+	size_t srcSz;
+	{
+		FILE *fs = fopen("Main.cl", "rb");
+		fseek(fs, 0, SEEK_END);
+		srcSz = ftell(fs);
+		src = malloc(srcSz + 1);
+		rewind(fs);
+		fread(src, 1, srcSz, fs);
+		fclose(fs);
+		src[srcSz] = 0;
+	}
 
 	cl_uint nPlatforms;
 	cl_platform_id platform;
@@ -108,15 +112,17 @@ kernel void CalcSqrt(global float *data)
 	if (ec == CL_DEVICE_NOT_FOUND || ec == CL_DEVICE_NOT_AVAILABLE)
 		Exit;
 
-	char deviceName[128] = {};
+	char deviceName[128];
 	ec = clGetDeviceInfo(device, CL_DEVICE_NAME, sizeof(deviceName), &deviceName, NULL); CHECK_EC;
 	printf("Device Name: '%s'\n", deviceName);
 
 	cl_context context = clCreateContext(NULL, 1, &device, NULL, NULL, &ec); CHECK_EC;
 	cl_command_queue q = clCreateCommandQueueWithProperties(context, device, NULL, &ec); CHECK_EC;
-	
-	float data[] = { 81, 69, 64 };
-	cl_mem buff = clCreateBuffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY | CL_MEM_USE_HOST_PTR, sizeof(data), &data, &ec); CHECK_EC;
+
+	enum { nObjs = 7};
+	float in[nObjs] = { 6, 9, 4, 20, 123, 9090909, 120312.321f };
+	float out[nObjs];
+	cl_mem buff = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof in, &in, &ec); CHECK_EC;
 
 	cl_program prog = clCreateProgramWithSource(context, 1, &src, &srcSz, &ec); CHECK_EC;
 	ec = clBuildProgram(prog, 1, &device, NULL, NULL, NULL); CHECK_EC;
@@ -125,19 +131,18 @@ kernel void CalcSqrt(global float *data)
 		size_t sz;
 		clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, 0, NULL, &sz);
 
-		char *log = (char *)malloc(sz);
+		char *log = malloc(sz);
 		clGetProgramBuildInfo(prog, device, CL_PROGRAM_BUILD_LOG, sz, log, NULL);
 		puts(log);
 	}
 
-	cl_kernel kernel = clCreateKernel(prog, "CalcSqrt", &ec); CHECK_EC;
-	ec = clSetKernelArg(kernel, 0, sizeof(buff), &buff); CHECK_EC;
-	size_t globalWork = 3;
-	ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &globalWork, NULL, 0, NULL, NULL); CHECK_EC;
-	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof(data), data, 0, NULL, NULL); CHECK_EC;
-	for (int i = 0; i < sizeof(data) / sizeof(*data); i++)
-		printf("%f ", data[i]);
-	putchar('\n');
+	cl_kernel kernel = clCreateKernel(prog, "Square", &ec); CHECK_EC;
+	ec = clSetKernelArg(kernel, 0, sizeof buff, &buff); CHECK_EC;
+	size_t nThrds = nObjs;
+	ec = clEnqueueNDRangeKernel(q, kernel, 1, NULL, &nThrds, NULL, 0, NULL, NULL); CHECK_EC;
+	ec = clEnqueueReadBuffer(q, buff, CL_TRUE, 0, sizeof out, out, 0, NULL, NULL); CHECK_EC;
+	for (int i = 0; i < nObjs; i++)
+		printf("In: %f, Out: %f\n", in[i], out[i]);
 
 	ec = clFlush(q); CHECK_EC;
 	ec = clFinish(q); CHECK_EC;
